@@ -2,14 +2,6 @@
 
 const API_BASE = '/api';
 
-export function getToken(): string | null {
-  return localStorage.getItem('klinikflow_token');
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem('klinikflow_token', token);
-}
-
 export function clearToken(): void {
   localStorage.removeItem('klinikflow_token');
   localStorage.removeItem('klinikflow_user');
@@ -29,20 +21,21 @@ export function setCurrentUser(user: any): void {
 }
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
-  const token = getToken();
   const headers = new Headers(options.headers || {});
 
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
+  const csrf = document.cookie.split('; ').find((cookie) => cookie.startsWith('klinikflow_csrf='));
+  if (csrf) {
+    headers.set('X-CSRF-Token', csrf.substring('klinikflow_csrf='.length));
   }
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
+    credentials: 'same-origin',
   });
 
   const data = await res.json().catch(() => ({ success: false, error: 'Respons server tidak valid' }));
@@ -50,6 +43,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
   if (!res.ok && !data.error) {
     data.error = `Error ${res.status}: ${res.statusText}`;
   }
+  if (!res.ok) data.status = res.status;
 
   return data;
 }

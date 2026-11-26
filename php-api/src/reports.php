@@ -2,18 +2,9 @@
 // KlinikFlow - Financial & Visit Report Generation
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/helpers/response.php';
+require_once __DIR__ . '/helpers/auth.php';
 
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-User-Id, X-User-Role, X-Clinic-Id');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
-$currentClinicId = $_SERVER['HTTP_X_CLINIC_ID'] ?? null;
-$currentUserRole = $_SERVER['HTTP_X_USER_ROLE'] ?? 'staff';
+$user = requireInternalUser(['admin', 'manager']);
 $filterQuery = $_GET['filter'] ?? $_GET['search'] ?? '';
 
 // Ambil ringkasan laporan tagihan dan kunjungan
@@ -25,10 +16,8 @@ $query = "SELECT i.*, p.full_name as patient_name, p.mrn, c.name as clinic_name,
           WHERE 1=1";
 $params = [];
 
-if ($currentUserRole !== 'admin' && !empty($currentClinicId)) {
-    $query .= " AND i.clinic_id = ?";
-    $params[] = $currentClinicId;
-}
+$query .= " AND i.clinic_id = ?";
+$params[] = $user['clinic_id'];
 
 if (!empty($filterQuery)) {
     $query .= " AND (p.full_name LIKE ? OR i.invoice_number LIKE ?)";

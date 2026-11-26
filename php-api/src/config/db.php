@@ -14,11 +14,12 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 } catch (PDOException $e) {
+    error_log('Database connection failed: ' . $e->getMessage());
     http_response_code(500);
     header('Content-Type: application/json');
     echo json_encode([
         'success' => false,
-        'error' => 'Koneksi database KlinikFlow gagal: ' . $e->getMessage()
+        'error' => 'Koneksi database KlinikFlow gagal'
     ]);
     exit;
 }

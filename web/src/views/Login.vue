@@ -48,6 +48,7 @@
       <p class="field-hint" style="text-align: center; margin-top: 14px;">
         Password seragam semua akun lab: <code class="inline-code">password123</code>
       </p>
+      <p class="field-hint" style="text-align: center"><router-link to="/activate">Aktivasi undangan staf</router-link></p>
     </div>
   </div>
 </template>
@@ -55,7 +56,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { apiFetch, setCurrentUser, setToken } from '../api';
+import { apiFetch, setCurrentUser } from '../api';
 
 const router = useRouter();
 const email = ref('staf1@klinikflow.local');
@@ -77,8 +78,7 @@ async function submitLogin() {
       body: JSON.stringify({ email: email.value, password: password.value }),
     });
 
-    if (res.success && res.token) {
-      setToken(res.token);
+    if (res.success && res.user) {
       setCurrentUser(res.user);
       window.dispatchEvent(new Event('user-updated'));
       router.push('/');

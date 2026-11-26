@@ -5,7 +5,7 @@
         <h2>Buku Pasien & Rekam Medis</h2>
         <p class="page-subtitle">Data identitas pasien untuk administrasi poliklinik</p>
       </div>
-      <button class="btn btn-primary" @click="showAddModal = true">+ Registrasi Pasien Baru</button>
+      <button v-if="canRegister" class="btn btn-primary" @click="showAddModal = true">+ Registrasi Pasien Baru</button>
     </div>
 
     <div class="card">
@@ -36,7 +36,7 @@
           <tbody>
             <tr v-for="p in patients" :key="p.id">
               <td class="mono nowrap" style="color: var(--primary-700); font-weight: 700;">{{ p.mrn }}</td>
-              <td v-html="p.full_name"></td>
+              <td>{{ p.full_name }}</td>
               <td><span class="badge badge-secondary">{{ p.gender === 'L' ? 'Laki-laki' : 'Perempuan' }}</span></td>
               <td class="nowrap">{{ p.birth_date }}</td>
               <td class="nowrap">{{ p.phone }}</td>
@@ -102,9 +102,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { apiFetch } from '../api';
+import { apiFetch, getCurrentUser } from '../api';
 
 const patients = ref<any[]>([]);
+const canRegister = ['admin', 'manager', 'staff'].includes(getCurrentUser()?.role);
 const searchQuery = ref('');
 const loading = ref(true);
 const showAddModal = ref(false);
@@ -116,7 +117,6 @@ const form = ref({
   gender: 'L',
   phone: '',
   address: '',
-  clinic_id: 1,
 });
 
 async function fetchPatients() {
@@ -145,7 +145,7 @@ async function submitPatient() {
     if (res.success) {
       alert(`Pasien berhasil didaftarkan: ${res.mrn}`);
       showAddModal.value = false;
-      form.value = { full_name: '', birth_date: '1990-01-01', gender: 'L', phone: '', address: '', clinic_id: 1 };
+      form.value = { full_name: '', birth_date: '1990-01-01', gender: 'L', phone: '', address: '' };
       await fetchPatients();
     } else {
       alert(`Gagal: ${res.error}`);

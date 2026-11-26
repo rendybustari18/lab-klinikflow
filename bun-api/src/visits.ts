@@ -1,13 +1,17 @@
 import pool from './db';
+import { extractAuthUser, type UserPayload } from './auth';
+import { randomUUID } from 'node:crypto';
 
 // Handler Kunjungan & Pemeriksaan Pasien
 export async function handleListVisits(req: Request): Promise<Response> {
+  const user = await extractAuthUser(req);
+  if (!user) return Response.json({ success: false, error: 'Akses ditolak' }, { status: 401 });
   const [rows] = await pool.query<any[]>(
     `SELECT v.*, p.full_name as patient_name, p.mrn, c.name as clinic_name
      FROM visits v
      JOIN patients p ON v.patient_id = p.id
      JOIN clinics c ON v.clinic_id = c.id
-     ORDER BY v.id DESC`
+    WHERE v.clinic_id = ? ORDER BY v.id DESC`, [user.clinic_id]
   );
 
   return Response.json({ success: true, data: rows });
@@ -15,20 +19,23 @@ export async function handleListVisits(req: Request): Promise<Response> {
 
 export async function handleCreateVisit(req: Request): Promise<Response> {
   try {
+    const user = await extractAuthUser(req);
+    if (!user) return Response.json({ success: false, error: 'Akses ditolak' }, { status: 401 });
     const body = await req.json();
-    const { clinic_id = 1, patient_id, doctor_name = 'dr. Aris Wibowo', visit_date, notes } = body;
+    const { patient_id, doctor_name = 'dr. Aris Wibowo', visit_date, notes } = body;
 
     if (!patient_id) {
       return Response.json({ success: false, error: 'Pasien wajib dipilih' }, { status: 400 });
     }
 
-    const [countRows] = await pool.query<any[]>('SELECT COUNT(*) as total FROM visits');
-    const visitUuid = `vis-${Math.random().toString(36).substring(2, 6)}-${String(countRows[0].total + 1).padStart(4, '0')}`;
+    const [patients] = await pool.query<any[]>('SELECT id FROM patients WHERE id = ? AND clinic_id = ?', [patient_id, user.clinic_id]);
+    if (!patients.length) return Response.json({ success: false, error: 'Pasien tidak ditemukan' }, { status: 404 });
+    const visitUuid = randomUUID();
 
     const [res] = await pool.query<any>(
       `INSERT INTO visits (visit_uuid, clinic_id, patient_id, doctor_name, visit_date, status, notes)
        VALUES (?, ?, ?, ?, COALESCE(?, CURDATE()), 'registered', ?)`,
-      [visitUuid, clinic_id, patient_id, doctor_name, visit_date || null, notes || '']
+      [visitUuid, user.clinic_id, patient_id, doctor_name, visit_date || null, notes || '']
     );
 
     return Response.json({
@@ -38,18 +45,18 @@ export async function handleCreateVisit(req: Request): Promise<Response> {
       visit_uuid: visitUuid,
     });
   } catch (err: any) {
-    return Response.json({ success: false, error: err.message }, { status: 500 });
+    return Response.json({ success: false, error: 'Pendaftaran kunjungan gagal' }, { status: 500 });
   }
 }
 
-export async function handleGetVisitByUuid(uuid: string): Promise<Response> {
+export async function handleGetVisitByUuid(uuid: string, user: UserPayload): Promise<Response> {
   const [rows] = await pool.query<any[]>(
     `SELECT v.*, p.full_name as patient_name, p.mrn, p.phone as patient_phone, p.address as patient_address, c.name as clinic_name
      FROM visits v
      JOIN patients p ON v.patient_id = p.id
      JOIN clinics c ON v.clinic_id = c.id
-     WHERE v.visit_uuid = ?`,
-    [uuid]
+    WHERE v.visit_uuid = ? AND v.clinic_id = ?`,
+      [uuid, user.clinic_id]
   );
 
   if (rows.length === 0) {

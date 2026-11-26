@@ -100,7 +100,6 @@ const form = ref({
   doctor_name: 'dr. Aris Wibowo',
   visit_date: new Date().toISOString().split('T')[0],
   notes: '',
-  clinic_id: 1,
 });
 
 async function fetchVisits() {

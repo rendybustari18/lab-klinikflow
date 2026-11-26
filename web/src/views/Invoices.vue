@@ -33,7 +33,7 @@
               <td><span class="badge" :class="statusBadge(inv.status)">{{ inv.status }}</span></td>
               <td class="muted text-sm nowrap">{{ inv.issued_at }}</td>
               <td>
-                <button class="btn btn-outline btn-sm" @click="openPaymentModal(inv)">Proses Bayar</button>
+                <button class="btn btn-outline btn-sm" :disabled="!['unpaid', 'partially_paid'].includes(inv.status) || Number(inv.outstanding_amount) <= 0" @click="openPaymentModal(inv)">Proses Bayar</button>
               </td>
             </tr>
           </tbody>
@@ -62,6 +62,10 @@
                 <span>Status Saat Ini</span>
                 <span class="badge" :class="statusBadge(activeInvoice?.status)">{{ activeInvoice?.status }}</span>
               </div>
+              <div class="result-row">
+                <span>Sisa Tagihan</span>
+                <b>Rp {{ Number(activeInvoice?.outstanding_amount).toLocaleString('id-ID') }}</b>
+              </div>
             </div>
 
             <div class="field">
@@ -70,7 +74,6 @@
                 <option value="qris">QRIS Statis / Dinamis</option>
                 <option value="cash">Tunai (Cash)</option>
                 <option value="bank_transfer">Transfer Bank Virtual Account</option>
-                <option value="insurance">Klaim Asuransi</option>
               </select>
             </div>
 
@@ -103,6 +106,7 @@ const activeInvoice = ref<any>(null);
 const payAmount = ref(0);
 const payMethod = ref('qris');
 const submittingPay = ref(false);
+const paymentRequestId = ref('');
 
 async function fetchInvoices() {
   loading.value = true;
@@ -120,7 +124,8 @@ async function fetchInvoices() {
 
 function openPaymentModal(inv: any) {
   activeInvoice.value = inv;
-  payAmount.value = parseFloat(inv.amount);
+  payAmount.value = parseFloat(inv.outstanding_amount);
+  paymentRequestId.value = crypto.randomUUID();
   showPaymentModal.value = true;
 }
 
@@ -133,6 +138,7 @@ async function submitPayment() {
         invoice_id: activeInvoice.value.id,
         amount: payAmount.value,
         method: payMethod.value,
+        request_id: paymentRequestId.value,
       }),
     });
 

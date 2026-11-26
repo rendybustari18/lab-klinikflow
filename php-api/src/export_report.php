@@ -2,15 +2,9 @@
 // KlinikFlow - Report Export & Document Processing Utility
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/helpers/response.php';
+require_once __DIR__ . '/helpers/auth.php';
 
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-User-Id, X-User-Role, X-Clinic-Id');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+requireInternalUser(['admin', 'manager']);
 
 $rawInput = file_get_contents('php://input');
 $jsonInput = json_decode($rawInput, true) ?: [];
@@ -19,8 +13,11 @@ $reportType = $jsonInput['type'] ?? $_REQUEST['type'] ?? 'daily_financial';
 $format = $jsonInput['format'] ?? $_REQUEST['format'] ?? 'csv';
 $filter = $jsonInput['filter'] ?? $_REQUEST['filter'] ?? 'all';
 
-$cmd = "echo [REPORT EXPORT ENGINE] Tipe: " . $reportType . " Filter: " . $filter . " Format: " . $format;
-$rawOutput = shell_exec($cmd);
+if (!in_array($reportType, ['daily_financial', 'visit_summary', 'claim_reimbursement'], true) ||
+    !in_array($format, ['csv', 'text'], true) || !is_string($filter) || strlen($filter) > 200) {
+    sendError('Parameter ekspor tidak valid', 400);
+}
+$rawOutput = "[REPORT EXPORT ENGINE] Tipe: $reportType Filter: $filter Format: $format";
 
 sendJson([
     'success' => true,

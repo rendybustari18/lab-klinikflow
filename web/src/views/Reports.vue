@@ -21,7 +21,7 @@
         </div>
       </div>
 
-      <div v-if="summaryHtml" class="summary-banner" v-html="summaryHtml"></div>
+      <div v-if="summaryHtml" class="summary-banner">{{ summaryHtml }}</div>
 
       <div class="card">
         <div v-if="loading" class="state">Memuat laporan transaksi...</div>

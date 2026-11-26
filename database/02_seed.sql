@@ -53,11 +53,11 @@ INSERT INTO visits (id, visit_uuid, clinic_id, patient_id, doctor_name, visit_da
 -- 6. Invoices (8 records)
 INSERT INTO invoices (id, invoice_number, visit_id, clinic_id, patient_id, amount, status, issued_at, paid_at) VALUES
 (1, 'INV-2026-0001', 1, 1, 1, 225000.00, 'paid', DATE_SUB(NOW(), INTERVAL 8 DAY), DATE_SUB(NOW(), INTERVAL 8 DAY)),
-(2, 'INV-2026-0002', 2, 1, 1, 165000.00, 'unpaid', DATE_SUB(NOW(), INTERVAL 3 DAY), NULL),
+(2, 'INV-2026-0002', 2, 1, 1, 165000.00, 'partially_paid', DATE_SUB(NOW(), INTERVAL 3 DAY), NULL),
 (3, 'INV-2026-0003', 3, 1, 2, 75000.00, 'unpaid', DATE_SUB(NOW(), INTERVAL 2 DAY), NULL),
 (4, 'INV-2026-0004', 4, 1, 2, 150000.00, 'unpaid', DATE_SUB(NOW(), INTERVAL 1 DAY), NULL),
 (5, 'INV-2026-0005', 5, 2, 3, 210000.00, 'paid', DATE_SUB(NOW(), INTERVAL 5 DAY), DATE_SUB(NOW(), INTERVAL 5 DAY)),
-(6, 'INV-2026-0006', 6, 2, 3, 135000.00, 'unpaid', DATE_SUB(NOW(), INTERVAL 2 DAY), NULL),
+(6, 'INV-2026-0006', 6, 2, 3, 135000.00, 'partially_paid', DATE_SUB(NOW(), INTERVAL 2 DAY), NULL),
 (7, 'INV-2026-0007', 7, 2, 4, 180000.00, 'paid', DATE_SUB(NOW(), INTERVAL 4 DAY), DATE_SUB(NOW(), INTERVAL 4 DAY)),
 (8, 'INV-2026-0008', 8, 2, 4, 45000.00, 'cancelled', DATE_SUB(NOW(), INTERVAL 1 DAY), NULL);
 
@@ -86,9 +86,9 @@ INSERT INTO payments (id, payment_ref, invoice_id, amount, method, settlement_st
 -- 9. Claims (4 records)
 INSERT INTO claims (id, claim_uuid, clinic_id, invoice_id, claim_number, insurance_name, amount, status, notes, submitted_at, approved_at) VALUES
 (1, 'clm-b7a1-89fc-0001', 1, 1, 'CLM-2026-001', 'BPJS Kesehatan Mandiri', 225000.00, 'approved', 'Klaim tindakan poliklinik disetujui penuh.', DATE_SUB(NOW(), INTERVAL 7 DAY), DATE_SUB(NOW(), INTERVAL 6 DAY)),
-(2, 'clm-b7a1-89fc-0002', 1, 2, 'CLM-2026-002', 'Asuransi Sehat Utama', 165000.00, 'submitted', 'Menunggu verifikasi dokumen pendukung resep.', DATE_SUB(NOW(), INTERVAL 2 DAY), NULL),
+(2, 'clm-b7a1-89fc-0002', 1, 2, 'CLM-2026-002', 'Asuransi Sehat Utama', 65000.00, 'submitted', 'Menunggu verifikasi dokumen pendukung resep.', DATE_SUB(NOW(), INTERVAL 2 DAY), NULL),
 (3, 'clm-c8b2-90ad-0003', 2, 5, 'CLM-2026-003', 'Asuransi Prima Medika', 210000.00, 'approved', 'Reimbursement biaya fisioterapi dan nebulizer.', DATE_SUB(NOW(), INTERVAL 4 DAY), DATE_SUB(NOW(), INTERVAL 3 DAY)),
-(4, 'clm-c8b2-90ad-0004', 2, 6, 'CLM-2026-004', 'Asuransi Bersama Raya', 135000.00, 'draft', 'Draft pengajuan klaim diagnostik EKG.', DATE_SUB(NOW(), INTERVAL 1 DAY), NULL);
+(4, 'clm-c8b2-90ad-0004', 2, 6, 'CLM-2026-004', 'Asuransi Bersama Raya', 85000.00, 'draft', 'Draft pengajuan klaim diagnostik EKG.', DATE_SUB(NOW(), INTERVAL 1 DAY), NULL);
 
 -- 10. Claim Attachments (6 records)
 INSERT INTO claim_attachments (id, attachment_uuid, claim_id, file_name, file_type, file_path, uploaded_by, uploaded_at) VALUES
@@ -98,9 +98,3 @@ INSERT INTO claim_attachments (id, attachment_uuid, claim_id, file_name, file_ty
 (4, 'att-e5d6-7c8b-0004', 3, 'billing_fisioterapi_05.pdf', 'application/pdf', '/uploads/claims/billing_fisioterapi_05.pdf', 4, DATE_SUB(NOW(), INTERVAL 4 DAY)),
 (5, 'att-e5d6-7c8b-0005', 3, 'surat_jaminan_05.pdf', 'application/pdf', '/uploads/claims/surat_jaminan_05.pdf', 4, DATE_SUB(NOW(), INTERVAL 4 DAY)),
 (6, 'att-e5d6-7c8b-0006', 4, 'draft_ekg_summary_06.pdf', 'application/pdf', '/uploads/claims/draft_ekg_summary_06.pdf', 4, DATE_SUB(NOW(), INTERVAL 1 DAY));
-
--- 11. Staff Invitations (For privilege escalation)
-INSERT INTO staff_invitations (id, clinic_id, email, role, token, is_accepted) VALUES
-(1, 1, 'calonstaf@klinikflow.local', 'staff', 'INVITE-TOKEN-MNT-9988', 0),
-(2, 2, 'calonkasir@klinikflow.local', 'cashier', 'INVITE-TOKEN-SNT-7766', 0);
-

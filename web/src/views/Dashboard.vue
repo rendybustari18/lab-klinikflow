@@ -7,10 +7,11 @@
           Selamat bertugas, <strong>{{ user?.name }}</strong> — {{ user?.clinic_name }}
         </p>
       </div>
-      <router-link to="/patients" class="btn btn-primary">+ Registrasi Pasien</router-link>
+      <router-link v-if="['admin', 'manager', 'staff'].includes(user?.role)" to="/patients" class="btn btn-primary">+ Registrasi Pasien</router-link>
     </div>
 
-    <div class="stack">
+    <div v-if="user?.role === 'patient'" class="state">Data pasien belum terhubung ke akun ini.</div>
+    <div v-else class="stack">
       <div class="stat-grid">
         <div class="stat-card">
           <span class="stat-accent accent-blue"></span>
@@ -41,7 +42,7 @@
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">Kunjungan Pasien Terbaru</h3>
-          <router-link to="/visits" class="text-sm">Lihat semua &rarr;</router-link>
+          <router-link v-if="user?.role !== 'cashier'" to="/visits" class="text-sm">Lihat semua &rarr;</router-link>
         </div>
 
         <div v-if="loading" class="state">Memuat data...</div>
@@ -84,6 +85,7 @@ const stats = ref<any>({ total_patients: 0, total_visits: 0, unpaid_invoices: 0,
 const loading = ref(true);
 
 onMounted(async () => {
+  if (user.value?.role === 'patient') { loading.value = false; return; }
   try {
     const res = await apiFetch('/dashboard/stats');
     if (res.success && res.data) {

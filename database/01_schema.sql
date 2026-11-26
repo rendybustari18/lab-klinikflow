@@ -4,6 +4,9 @@
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS staff_invitations;
+DROP TABLE IF EXISTS auth_sessions;
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS payment_requests;
 DROP TABLE IF EXISTS claim_attachments;
 DROP TABLE IF EXISTS claims;
 DROP TABLE IF EXISTS payments;
@@ -35,6 +38,14 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_users_clinic FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE auth_sessions (
+    id CHAR(36) PRIMARY KEY,
+    user_id INT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_sessions_expiry (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE patients (
@@ -111,6 +122,28 @@ CREATE TABLE payments (
     settlement_status ENUM('pending', 'settled') NOT NULL DEFAULT 'settled',
     paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_payments_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    actor_id INT NOT NULL,
+    clinic_id INT NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    entity_type VARCHAR(32) NOT NULL,
+    entity_id INT NOT NULL,
+    details JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_clinic (clinic_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE payment_requests (
+    request_id CHAR(36) PRIMARY KEY,
+    invoice_id INT NOT NULL,
+    user_id INT NOT NULL,
+    payment_id INT NOT NULL,
+    CONSTRAINT fk_payment_requests_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+    CONSTRAINT fk_payment_requests_user FOREIGN KEY (user_id) REFERENCES users(id),
+    CONSTRAINT fk_payment_requests_payment FOREIGN KEY (payment_id) REFERENCES payments(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE claims (

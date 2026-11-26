@@ -33,32 +33,16 @@
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Klaim Token Undangan Staf Baru</h3>
+          <h3 class="card-title">Buat Undangan Staf</h3>
         </div>
         <p class="page-subtitle" style="margin-bottom: 16px;">
-          Calon pegawai mengaktifkan akun melalui token undangan resmi klinik.
+          Token berlaku selama 24 jam dan hanya ditampilkan sekali.
         </p>
 
-        <form @submit.prevent="submitAcceptInvitation">
+        <form @submit.prevent="submitInvitation">
           <div class="field">
-            <label class="label" for="invite_token">Token Undangan</label>
-            <input id="invite_token" v-model="inviteForm.token" class="input mono" type="text" required />
-            <div class="field-hint">
-              Token lab siap pakai:
-              <code class="inline-code">INVITE-TOKEN-MNT-9988</code>
-              atau
-              <code class="inline-code">INVITE-TOKEN-SNT-7766</code>
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label" for="invite_name">Nama Lengkap</label>
-            <input id="invite_name" v-model="inviteForm.name" class="input" type="text" required />
-          </div>
-
-          <div class="field">
-            <label class="label" for="invite_password">Kata Sandi Baru</label>
-            <input id="invite_password" v-model="inviteForm.password" class="input" type="password" required />
+            <label class="label" for="invite_email">Email Calon Staf</label>
+            <input id="invite_email" v-model="inviteForm.email" class="input" type="email" required />
           </div>
 
           <div class="field">
@@ -66,17 +50,19 @@
             <select id="invite_role" v-model="inviteForm.role" class="select">
               <option value="staff">staff (Staf Pendaftaran)</option>
               <option value="cashier">cashier (Kasir Poliklinik)</option>
-              <option value="manager">manager (Koordinator Operasional)</option>
-              <option value="admin">admin (Administrator Pusat)</option>
             </select>
           </div>
 
           <div style="display: flex; justify-content: flex-end;">
             <button type="submit" class="btn btn-primary btn-sm" :disabled="claiming">
-              {{ claiming ? 'Mendaftarkan...' : 'Aktifkan Akun Staf' }}
+              {{ claiming ? 'Membuat...' : 'Buat Undangan' }}
             </button>
           </div>
         </form>
+        <div v-if="createdToken" class="result-panel">
+          <div class="result-panel-title">Token Undangan</div>
+          <code style="overflow-wrap: anywhere">{{ createdToken }}</code>
+        </div>
       </div>
     </div>
   </div>
@@ -88,13 +74,11 @@ import { apiFetch } from '../api';
 
 const staffList = ref<any[]>([]);
 const claiming = ref(false);
+const createdToken = ref('');
 
 const inviteForm = ref({
-  token: 'INVITE-TOKEN-MNT-9988',
-  name: 'Staf Percobaan',
-  password: 'password123',
-  phone: '0819999888',
-  role: 'admin',
+  email: '',
+  role: 'staff',
 });
 
 async function fetchStaff() {
@@ -108,17 +92,18 @@ async function fetchStaff() {
   }
 }
 
-async function submitAcceptInvitation() {
+async function submitInvitation() {
   claiming.value = true;
+  createdToken.value = '';
   try {
-    const res = await apiFetch('/staff/accept-invitation', {
+    const res = await apiFetch('/staff/invitations', {
       method: 'POST',
       body: JSON.stringify(inviteForm.value),
     });
 
     if (res.success) {
-      alert(`[SUKSES REGISTRASI UNDANGAN]\n${res.message}\nHak Akses: ${res.assigned_role}`);
-      await fetchStaff();
+      createdToken.value = res.token;
+      inviteForm.value.email = '';
     } else {
       alert(`Gagal: ${res.error}`);
     }

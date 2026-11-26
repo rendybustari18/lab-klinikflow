@@ -33,6 +33,7 @@ services:
       DB_NAME: klinikflow_db
       DB_USER: klinikflow_user
       DB_PASS: klinikflow_pass
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET:?Set INTERNAL_AUTH_SECRET in .env}
     networks:
       - klinikflow-internal
     depends_on:
@@ -46,7 +47,7 @@ services:
     container_name: klinikflow-bun-api
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       PORT: "3000"
       DB_HOST: mysql
@@ -55,7 +56,10 @@ services:
       DB_USER: klinikflow_user
       DB_PASS: klinikflow_pass
       PHP_API_URL: http://php-api
-      JWT_SECRET: klinikflow-super-secret-jwt-key-2026
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET:?Set INTERNAL_AUTH_SECRET in .env}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     networks:
       - klinikflow-internal
     depends_on:
@@ -71,7 +75,7 @@ services:
     container_name: klinikflow-web
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     networks:
       - klinikflow-internal
     depends_on:

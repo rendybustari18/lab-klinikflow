@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <title>Mind Map Threat Model KlinikFlow</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 3400px; height: 2100px; background: #fff; }
+    body { font-family: "Helvetica Neue", Helvetica, sans-serif; }
+    svg { display: block; width: 3400px; height: 2100px; }
+  </style>
+</head>
+<body>
+  <svg id="map" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3400 2100" role="img" aria-label="Mind map threat model KlinikFlow dengan sembilan modul dan 17 temuan keamanan"></svg>
+  <script>
+    const sections = [
+      { side: 'left', y: 310, number: '01', title: 'Autentikasi & sesi', endpoint: '/api/auth/*', color: '#ed6868', items: [
+        ['KF-01', 'Secret JWT diketahui; logout tidak mencabut token', 'Gunakan secret acak dan mekanisme pencabutan sesi.'],
+        ['KF-02', 'Token di localStorage dapat diakses melalui XSS', 'Gunakan cookie HttpOnly dan mitigasi CSRF.']
+      ] },
+      { side: 'left', y: 675, number: '02', title: 'Data pasien', endpoint: '/api/patients', color: '#df9449', items: [
+        ['KF-03', 'Baca dan registrasi pasien tanpa autentikasi', 'Terapkan autentikasi, role, dan batas klinik.'],
+        ['KF-04', 'Nama pasien dirender sebagai HTML: stored XSS', 'Render nama sebagai teks dan terapkan CSP.']
+      ] },
+      { side: 'left', y: 1005, number: '03', title: 'Kunjungan', endpoint: '/api/visits/*', color: '#64a98b', items: [
+        ['KF-05', 'Daftar, detail, dan pencatatan tanpa autentikasi', 'Periksa akses objek dan kesesuaian pasien dengan klinik.']
+      ] },
+      { side: 'left', y: 1300, number: '04', title: 'Tarif layanan', endpoint: '/api/services/fee', color: '#5d9bb5', items: [
+        ['KF-06', 'Tarif dapat diubah lintas peran dan klinik', 'Batasi role, kepemilikan layanan, dan audit perubahan.']
+      ] },
+      { side: 'left', y: 1665, number: '05', title: 'Tagihan & pembayaran', endpoint: '/api/invoices/* + /api/payments/process', color: '#ad7ac4', items: [
+        ['KF-07', 'Daftar dan detail tagihan terbuka tanpa sesi', 'Periksa akses role, pasien, dan klinik pada setiap tagihan.'],
+        ['KF-08', 'Pembayaran tanpa validasi nominal dan proteksi replay', 'Validasi status dan nominal; gunakan transaksi idempotent.']
+      ] },
+      { side: 'right', y: 345, number: '06', title: 'Klaim & lampiran', endpoint: '/api/claims/* + /api/attachments/*', color: '#ed6868', items: [
+        ['KF-09', 'Klaim terbuka anonim dan detail lintas klinik', 'Wajibkan sesi dan otorisasi pada setiap objek klaim.'],
+        ['KF-10', 'Approval tanpa otorisasi atau validasi status', 'Batasi approver; validasi transisi secara atomik.'],
+        ['KF-11', 'Metadata dan path lampiran terbuka', 'Batasi akses berdasarkan klaim dan klinik pemilik.']
+      ] },
+      { side: 'right', y: 810, number: '07', title: 'Laporan & ekspor', endpoint: '/api/reports + /api/reports/export', color: '#df9449', items: [
+        ['KF-12', 'Laporan lintas klinik dan reflected XSS', 'Batasi akses dan render ringkasan sebagai teks.'],
+        ['KF-13', 'Input ekspor mencapai shell tanpa autentikasi', 'Hilangkan shell dan batasi akses ekspor.']
+      ] },
+      { side: 'right', y: 1255, number: '08', title: 'Staf & undangan', endpoint: '/api/staff/*', color: '#64a98b', items: [
+        ['KF-14', 'Token undangan terbuka; role ditentukan klien', 'Lindungi token dan tentukan role di server.'],
+        ['KF-15', 'Daftar staf untuk admin atau manager lintas klinik', 'Terapkan kebijakan dan filter akses lintas klinik.']
+      ] },
+      { side: 'right', y: 1695, number: '09', title: 'Dashboard & arsitektur', endpoint: '/api/dashboard/stats + proxy PHP', color: '#5d9bb5', items: [
+        ['KF-16', 'Statistik dan kunjungan terakhir lintas klinik', 'Batasi isi dashboard berdasarkan role dan klinik.'],
+        ['KF-17', 'Gateway meneruskan request anonim ke PHP', 'Wajibkan identitas terverifikasi pada kedua layanan.']
+      ] }
+    ];
+
+    const svg = document.getElementById('map');
+    const ns = 'http://www.w3.org/2000/svg';
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+
+    function element(name, attributes, parent = svg) {
+      const node = document.createElementNS(ns, name);
+      for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+      parent.appendChild(node);
+      return node;
+    }
+
+    function text(x, y, value, options = {}) {
+      const node = element('text', { x, y, fill: options.color || '#293338', 'font-size': options.size || 22,
+        'font-weight': options.weight || 400, 'text-anchor': options.anchor || 'start' });
+      node.textContent = value;
+      return node;
+    }
+
+    function wrappedText(x, y, value, width, options = {}) {
+      const size = options.size || 20;
+      context.font = `${options.weight || 400} ${size}px Helvetica`;
+      const lines = [''];
+      for (const word of value.split(' ')) {
+        const index = lines.length - 1;
+        const candidate = lines[index] ? `${lines[index]} ${word}` : word;
+        if (lines[index] && context.measureText(candidate).width > width) lines.push(word);
+        else lines[index] = candidate;
+      }
+      lines.forEach((line, index) => text(x, y + index * (size + 5), line, options));
+    }
+
+    element('rect', { x: 0, y: 0, width: 3400, height: 2100, fill: '#fff' });
+    text(90, 75, 'KLINIKFLOW / SECURITY LAB', { size: 23, weight: 700, color: '#66777c' });
+    text(90, 116, 'Peta ancaman & rekomendasi', { size: 30, weight: 700, color: '#202c30' });
+    text(3310, 80, '17 TEMUAN  /  9 MODUL', { size: 22, weight: 700, color: '#66777c', anchor: 'end' });
+    element('line', { x1: 90, y1: 145, x2: 3310, y2: 145, stroke: '#e5eceb', 'stroke-width': 2 });
+
+    for (const section of sections) {
+      const left = section.side === 'left';
+      const headingX = left ? 1125 : 1990;
+      const headingWidth = 285;
+      const headingY = section.y - 46;
+      const cardX = left ? 275 : 2410;
+      const cardWidth = 690;
+      const cardHeight = 110;
+      const gap = 16;
+      const totalHeight = section.items.length * cardHeight + (section.items.length - 1) * gap;
+      const firstY = section.y - totalHeight / 2;
+      const rootX = left ? 1498 : 1902;
+      const headingEdge = left ? headingX + headingWidth : headingX;
+      const rootY = 1010;
+      const headingControl = left ? headingEdge + 100 : headingEdge - 100;
+      const rootControl = left ? rootX - 115 : rootX + 115;
+
+      element('path', { d: `M ${rootX} ${rootY} C ${rootControl} ${rootY}, ${headingControl} ${section.y}, ${headingEdge} ${section.y}`,
+        fill: 'none', stroke: section.color, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: .8 });
+
+      const trunkX = left ? 1058 : 2342;
+      const trunkStart = firstY + cardHeight / 2;
+      const trunkEnd = firstY + (section.items.length - 1) * (cardHeight + gap) + cardHeight / 2;
+      element('path', { d: `M ${left ? headingX : headingX + headingWidth} ${section.y} L ${trunkX} ${section.y} M ${trunkX} ${trunkStart} L ${trunkX} ${trunkEnd}`,
+        fill: 'none', stroke: section.color, 'stroke-width': 2.5, opacity: .65 });
+
+      section.items.forEach((item, index) => {
+        const cardY = firstY + index * (cardHeight + gap);
+        const cardEdge = left ? cardX + cardWidth : cardX;
+        element('line', { x1: trunkX, y1: cardY + cardHeight / 2, x2: cardEdge, y2: cardY + cardHeight / 2,
+          stroke: section.color, 'stroke-width': 2.5, opacity: .65 });
+        element('rect', { x: cardX, y: cardY, width: cardWidth, height: cardHeight, rx: 7,
+          fill: section.color, 'fill-opacity': .09, stroke: section.color, 'stroke-opacity': .35, 'stroke-width': 1.5 });
+        text(cardX + 20, cardY + 31, item[0], { size: 18, weight: 700, color: section.color });
+        wrappedText(cardX + 88, cardY + 31, item[1], cardWidth - 108, { size: 19, weight: 700 });
+        text(cardX + 20, cardY + 74, 'SARAN', { size: 15, weight: 700, color: section.color });
+        wrappedText(cardX + 88, cardY + 74, item[2], cardWidth - 108, { size: 18, color: '#536267' });
+      });
+
+      element('rect', { x: headingX, y: headingY, width: headingWidth, height: 92, rx: 7, fill: section.color });
+      text(headingX + 17, headingY + 29, section.number, { size: 17, weight: 700, color: '#fff' });
+      text(headingX + 52, headingY + 30, section.title, { size: 20, weight: 700, color: '#fff' });
+      wrappedText(headingX + 17, headingY + 58, section.endpoint, headingWidth - 34, { size: 15, color: '#fff' });
+    }
+
+    element('rect', { x: 1498, y: 868, width: 404, height: 284, rx: 12, fill: '#fff', stroke: '#cddbd9', 'stroke-width': 2 });
+    text(1700, 924, 'THREAT MODEL', { size: 22, weight: 700, color: '#637d79', anchor: 'middle' });
+    text(1700, 985, 'KlinikFlow', { size: 48, weight: 700, color: '#203b39', anchor: 'middle' });
+    text(1700, 1026, 'Sistem administrasi klinik,', { size: 21, color: '#485d5c', anchor: 'middle' });
+    text(1700, 1057, 'tagihan & klaim asuransi', { size: 21, color: '#485d5c', anchor: 'middle' });
+    element('line', { x1: 1566, y1: 1082, x2: 1834, y2: 1082, stroke: '#e3ecea', 'stroke-width': 2 });
+    text(1700, 1115, 'Analisis statis / data dummy', { size: 17, color: '#7b8b89', anchor: 'middle' });
+
+    element('line', { x1: 90, y1: 2010, x2: 3310, y2: 2010, stroke: '#e5eceb', 'stroke-width': 2 });
+    text(90, 2055, 'KF-01 s.d. KF-17 merujuk ke rincian dan bukti kode pada THREAT_MODEL.md', { size: 20, color: '#687a7b' });
+    text(3310, 2055, 'LINGKUNGAN LAB LOKAL', { size: 19, weight: 700, color: '#687a7b', anchor: 'end' });
+  </script>
+</body>
+</html>

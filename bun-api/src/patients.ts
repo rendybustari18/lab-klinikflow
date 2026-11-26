@@ -1,15 +1,19 @@
 import pool from './db';
+import { extractAuthUser } from './auth';
+import { randomBytes } from 'node:crypto';
 
 // Handler Manajemen Data Pasien
 export async function handleListPatients(req: Request): Promise<Response> {
+  const user = await extractAuthUser(req);
+  if (!user) return Response.json({ success: false, error: 'Akses ditolak' }, { status: 401 });
   const url = new URL(req.url);
   const search = url.searchParams.get('search') || '';
 
   let query = `SELECT p.*, c.name as clinic_name 
                FROM patients p
                JOIN clinics c ON p.clinic_id = c.id
-               WHERE 1=1`;
-  const params: any[] = [];
+               WHERE p.clinic_id = ?`;
+  const params: any[] = [user.clinic_id];
 
   if (search) {
     query += ` AND (p.full_name LIKE ? OR p.mrn LIKE ? OR p.phone LIKE ?)`;
@@ -25,21 +29,21 @@ export async function handleListPatients(req: Request): Promise<Response> {
 
 export async function handleCreatePatient(req: Request): Promise<Response> {
   try {
+    const user = await extractAuthUser(req);
+    if (!user) return Response.json({ success: false, error: 'Akses ditolak' }, { status: 401 });
     const body = await req.json();
-    const { clinic_id = 1, full_name, birth_date, gender, phone, address } = body;
+    const { full_name, birth_date, gender, phone, address } = body;
 
     if (!full_name || !birth_date || !gender || !phone) {
       return Response.json({ success: false, error: 'Data identitas pasien wajib diisi lengkap' }, { status: 400 });
     }
 
-    const [countRows] = await pool.query<any[]>('SELECT COUNT(*) as total FROM patients');
-    const mrn = `MRN-2026-${String(countRows[0].total + 1).padStart(3, '0')}`;
+    const mrn = `MRN-${randomBytes(12).toString('hex').toUpperCase()}`;
 
-    // Nama pasien disimpan tanpa sanitasi (XSS sink ketika ditampilkan di tabel web)
     const [res] = await pool.query<any>(
       `INSERT INTO patients (clinic_id, mrn, full_name, birth_date, gender, phone, address)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [clinic_id, mrn, full_name, birth_date, gender, phone, address || '']
+      [user.clinic_id, mrn, full_name, birth_date, gender, phone, address || '']
     );
 
     return Response.json({
@@ -49,7 +53,7 @@ export async function handleCreatePatient(req: Request): Promise<Response> {
       mrn,
     });
   } catch (err: any) {
-    return Response.json({ success: false, error: err.message }, { status: 500 });
+    return Response.json({ success: false, error: 'Pendaftaran pasien gagal' }, { status: 500 });
   }
 }
 

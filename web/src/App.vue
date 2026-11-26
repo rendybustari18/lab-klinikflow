@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { clearToken, getCurrentUser } from './api';
+import { apiFetch, clearToken, getCurrentUser, setCurrentUser } from './api';
 
 const router = useRouter();
 const user = ref<any>(null);
@@ -158,8 +158,17 @@ function refreshUser() {
   user.value = getCurrentUser();
 }
 
-onMounted(() => {
+onMounted(async () => {
+  localStorage.removeItem('klinikflow_token');
+  try {
+    const result = await apiFetch('/auth/me');
+    if (result.success) setCurrentUser(result.user);
+    else clearToken();
+  } catch {
+    clearToken();
+  }
   refreshUser();
+  if (!user.value && !router.currentRoute.value.meta.guest) router.push('/login');
   window.addEventListener('storage', refreshUser);
   window.addEventListener('user-updated', refreshUser);
 });
@@ -175,10 +184,16 @@ const roleBadgeClass = computed(() => {
   }
 });
 
-function logout() {
-  clearToken();
-  user.value = null;
-  sidebarOpen.value = false;
-  router.push('/login');
+async function logout() {
+  try {
+    const result = await apiFetch('/auth/logout', { method: 'POST' });
+    if (!result.success && result.status !== 401) throw new Error(result.error || 'Logout gagal');
+    clearToken();
+    user.value = null;
+    sidebarOpen.value = false;
+    router.push('/login');
+  } catch {
+    alert('Logout gagal. Silakan coba lagi.');
+  }
 }
 </script>

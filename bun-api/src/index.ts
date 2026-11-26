@@ -1,6 +1,6 @@
-import { extractAuthUser, handleGetMe, handleLogin } from './auth';
+import { extractAuthUser, handleGetMe, handleLogin, handleLogout, validateCsrf, type UserPayload } from './auth';
 import { handleListServices, handleUpdateServiceFee } from './services';
-import { handleAcceptInvitation, handleListInvitations, handleListStaff } from './staff';
+import { handleAcceptInvitation, handleCreateInvitation, handleListInvitations, handleListStaff } from './staff';
 import { handleCreatePatient, handleListPatients } from './patients';
 import { handleCreateVisit, handleGetVisitByUuid, handleListVisits } from './visits';
 import { handleGetInvoiceDetail, handleListInvoices, handleProcessPayment } from './invoices';
@@ -9,11 +9,38 @@ import pool from './db';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-function setCorsHeaders(resHeaders: Headers): void {
-  resHeaders.set('Access-Control-Allow-Origin', '*');
-  resHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  resHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+const APP_ORIGIN = process.env.APP_ORIGIN || 'http://localhost:8080';
+
+function allowedRoles(path: string, method: string): UserPayload['role'][] | null {
+  if (path === '/api/auth/me' || path === '/api/auth/logout') return ['admin', 'manager', 'staff', 'cashier', 'patient'];
+  if (path === '/api/dashboard/stats') return ['admin', 'manager', 'staff', 'cashier'];
+  if (path === '/api/patients') return method === 'POST' ? ['admin', 'manager', 'staff'] : ['admin', 'manager', 'staff', 'cashier'];
+  if (path === '/api/visits' || path.startsWith('/api/visits/')) return ['admin', 'manager', 'staff'];
+  if (path === '/api/services' || path.startsWith('/api/services/')) return ['admin', 'manager'];
+  if (path === '/api/invoices' || path.startsWith('/api/invoices/') || path === '/api/payments/process') return ['admin', 'manager', 'cashier'];
+  if (path === '/api/claims/approve') return ['admin', 'manager'];
+  if (path === '/api/claims' || path.startsWith('/api/claims/') || path === '/api/attachments' || path.startsWith('/api/attachments/')) return ['admin', 'manager', 'staff', 'cashier'];
+  if (path === '/api/reports' || path === '/api/reports/export' || path === '/api/staff' || path === '/api/staff/invitations') return ['admin', 'manager'];
+  return null;
 }
+
+await pool.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
+  id CHAR(36) PRIMARY KEY, user_id INT NOT NULL, expires_at DATETIME NOT NULL,
+  INDEX idx_sessions_expiry (expires_at),
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB`);
+await pool.query(`CREATE TABLE IF NOT EXISTS audit_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY, actor_id INT NOT NULL, clinic_id INT NOT NULL,
+  action VARCHAR(64) NOT NULL, entity_type VARCHAR(32) NOT NULL, entity_id INT NOT NULL,
+  details JSON NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_audit_clinic (clinic_id, created_at)
+) ENGINE=InnoDB`);
+await pool.query(`CREATE TABLE IF NOT EXISTS payment_requests (
+  request_id CHAR(36) PRIMARY KEY, invoice_id INT NOT NULL, user_id INT NOT NULL, payment_id INT NOT NULL,
+  CONSTRAINT fk_payment_requests_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+  CONSTRAINT fk_payment_requests_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_payment_requests_payment FOREIGN KEY (payment_id) REFERENCES payments(id)
+) ENGINE=InnoDB`);
 
 const server = Bun.serve({
   port: PORT,
@@ -22,13 +49,28 @@ const server = Bun.serve({
     const path = url.pathname;
     const method = req.method;
 
-    if (method === 'OPTIONS') {
-      const headers = new Headers();
-      setCorsHeaders(headers);
-      return new Response(null, { status: 204, headers });
-    }
-
     try {
+      const origin = req.headers.get('Origin');
+      if (origin && origin !== APP_ORIGIN) {
+        return Response.json({ success: false, error: 'Origin tidak diizinkan' }, { status: 403 });
+      }
+      if (method === 'OPTIONS') return new Response(null, { status: 204 });
+      const isMutation = !['GET', 'HEAD'].includes(method);
+      if (isMutation && !req.headers.get('Content-Type')?.toLowerCase().startsWith('application/json')) {
+        return Response.json({ success: false, error: 'Content-Type harus application/json' }, { status: 415 });
+      }
+      const publicRoute = (path === '/api/auth/login' || path === '/api/staff/accept-invitation') && method === 'POST';
+      const user = publicRoute ? null : await extractAuthUser(req);
+      if (!publicRoute && !user) {
+        return Response.json({ success: false, error: 'Sesi tidak valid atau telah berakhir' }, { status: 401 });
+      }
+      if (!publicRoute && isMutation && !validateCsrf(req)) {
+        return Response.json({ success: false, error: 'Token CSRF tidak valid' }, { status: 403 });
+      }
+      const roles = allowedRoles(path, method);
+      if (!publicRoute && roles && !roles.includes(user!.role)) {
+        return Response.json({ success: false, error: 'Akses ditolak' }, { status: 403 });
+      }
       let response: Response;
 
       // 1. Auth routes
@@ -37,21 +79,23 @@ const server = Bun.serve({
       } else if (path === '/api/auth/me' && method === 'GET') {
         response = await handleGetMe(req);
       } else if (path === '/api/auth/logout' && method === 'POST') {
-        response = Response.json({ success: true, message: 'Logout berhasil' });
+        response = await handleLogout(user!);
       }
 
-      // 2. Services catalog & Fee adjustment (IDOR Perubahan Biaya/Harga)
+      // 2. Services catalog & fee adjustment
       else if (path === '/api/services' && method === 'GET') {
         response = await handleListServices(req);
       } else if ((path === '/api/services/fee' || path === '/api/services/update-fee') && (method === 'POST' || method === 'PUT')) {
         response = await handleUpdateServiceFee(req);
       }
 
-      // 3. Staff & Invitation routes (Privilege Escalation)
+      // 3. Staff & invitation routes
       else if (path === '/api/staff' && method === 'GET') {
         response = await handleListStaff(req);
       } else if (path === '/api/staff/invitations' && method === 'GET') {
         response = await handleListInvitations(req);
+      } else if (path === '/api/staff/invitations' && method === 'POST') {
+        response = await handleCreateInvitation(req);
       } else if (path === '/api/staff/accept-invitation' && method === 'POST') {
         response = await handleAcceptInvitation(req);
       }
@@ -70,15 +114,15 @@ const server = Bun.serve({
         response = await handleCreateVisit(req);
       } else if (path.startsWith('/api/visits/') && method === 'GET') {
         const uuid = path.split('/')[3];
-        response = await handleGetVisitByUuid(uuid);
+        response = await handleGetVisitByUuid(uuid, user!);
       }
 
-      // 6. Invoices & Payments (Business Logic settlement replay)
+      // 6. Invoices & payments
       else if (path === '/api/invoices' && method === 'GET') {
         response = await handleListInvoices(req);
       } else if (path.startsWith('/api/invoices/') && method === 'GET') {
         const invId = parseInt(path.split('/')[3], 10);
-        response = await handleGetInvoiceDetail(invId);
+        response = await handleGetInvoiceDetail(invId, user!);
       } else if (path === '/api/payments/process' && method === 'POST') {
         response = await handleProcessPayment(req);
       }
@@ -89,15 +133,15 @@ const server = Bun.serve({
       }
 
       // 8. PHP Legacy Service Proxy Routes
-      // Report export (RCE)
+      // Report export
       else if (path === '/api/reports/export') {
         response = await proxyToPhp(req, 'export_report.php');
       }
-      // Report viewing (Reflected XSS)
+      // Report viewing
       else if (path === '/api/reports' && method === 'GET') {
         response = await proxyToPhp(req, 'reports.php');
       }
-      // Claims (Business Logic Replay & BOLA)
+      // Claims
       else if (path === '/api/claims' && method === 'GET') {
         response = await proxyToPhp(req, 'claims.php', 'list');
       } else if (path === '/api/claims/approve' && method === 'POST') {
@@ -106,7 +150,7 @@ const server = Bun.serve({
         const claimId = path.split('/')[3];
         response = await proxyToPhp(req, 'claims.php', 'detail', { id: claimId });
       }
-      // Attachments (BOLA UUID)
+      // Attachments
       else if (path === '/api/attachments' && method === 'GET') {
         response = await proxyToPhp(req, 'attachments.php', 'list');
       } else if (path.startsWith('/api/attachments/') && method === 'GET') {
@@ -119,17 +163,12 @@ const server = Bun.serve({
         response = Response.json({ success: false, error: 'Endpoint KlinikFlow tidak ditemukan' }, { status: 404 });
       }
 
-      const headers = new Headers(response.headers);
-      setCorsHeaders(headers);
-
-      return new Response(response.body, {
-        status: response.status,
-        headers,
-      });
+      response.headers.set('X-Content-Type-Options', 'nosniff');
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     } catch (err: any) {
-      const headers = new Headers();
-      setCorsHeaders(headers);
-      return Response.json({ success: false, error: err.message }, { status: 500, headers });
+      console.error(err);
+      return Response.json({ success: false, error: 'Kesalahan internal server' }, { status: 500 });
     }
   },
 });
@@ -137,22 +176,22 @@ const server = Bun.serve({
 console.log(`[KlinikFlow BFF] Gateway berjalan di port ${PORT}`);
 
 async function handleDashboardStats(req: Request): Promise<Response> {
-  const user = extractAuthUser(req);
+  const user = await extractAuthUser(req);
   if (!user) {
     return Response.json({ success: false, error: 'Akses ditolak' }, { status: 401 });
   }
 
-  const [patientCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM patients');
-  const [visitCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM visits');
-  const [invoiceCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM invoices WHERE status = "unpaid"');
-  const [claimCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM claims WHERE status = "submitted"');
+  const [patientCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM patients WHERE clinic_id = ?', [user.clinic_id]);
+  const [visitCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM visits WHERE clinic_id = ?', [user.clinic_id]);
+  const [invoiceCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM invoices WHERE status IN ("unpaid", "partially_paid") AND clinic_id = ?', [user.clinic_id]);
+  const [claimCount] = await pool.query<any[]>('SELECT COUNT(*) as count FROM claims WHERE status = "submitted" AND clinic_id = ?', [user.clinic_id]);
 
   const [recentVisits] = await pool.query<any[]>(
-    `SELECT v.*, p.full_name as patient_name, c.name as clinic_name
+    `SELECT v.id, v.visit_uuid, v.doctor_name, v.visit_date, v.status, v.clinic_id, p.full_name as patient_name, c.name as clinic_name
      FROM visits v
      JOIN patients p ON v.patient_id = p.id
      JOIN clinics c ON v.clinic_id = c.id
-     ORDER BY v.id DESC LIMIT 5`
+    WHERE v.clinic_id = ? ORDER BY v.id DESC LIMIT 5`, [user.clinic_id]
   );
 
   return Response.json({

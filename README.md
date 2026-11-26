@@ -19,7 +19,7 @@
 Aplikasi dirancang sebagai monorepo multi-service:
 - **Frontend (`web/`)**: Vue 3 + Vite, antarmuka pengguna responsif berbahasa Indonesia dengan Pico CSS.
 - **BFF / API Gateway (`bun-api/`)**: Bun runtime + TypeScript, menangani sesi JWT, katalog layanan, data pasien, kunjungan, tagihan, dan kepegawaian.
-- **Legacy Service (`php-api/`)**: PHP 8.3 Apache, menangani rekapitulasi laporan, berkas lampiran klaim, persetujuan asuransi, dan engine ekspor utilitas CLI.
+- **Legacy Service (`php-api/`)**: PHP 8.3 Apache, menangani rekapitulasi laporan, metadata lampiran klaim, persetujuan asuransi, dan simulasi ekspor tanpa shell.
 - **Database (`database/`)**: MySQL 8.0 dengan skema relasional terisolasi dan inisialisasi *seed dummy* otomatis.
 
 ---
@@ -38,19 +38,25 @@ Aplikasi dirancang sebagai monorepo multi-service:
    cd KlinikFlow
    ```
 
-2. Bangun dan jalankan seluruh container:
+2. Salin `.env.example` menjadi `.env`, lalu isi `JWT_SECRET` dan `INTERNAL_AUTH_SECRET` dengan **dua nilai acak yang berbeda**, masing-masing minimal 32 byte. Gunakan `openssl rand -hex 32` untuk menghasilkan setiap nilai. Jangan masukkan `.env` ke repository.
+
+3. Bangun dan jalankan seluruh container:
    ```bash
    docker compose up -d --build
    ```
 
-3. Periksa status kesiapan seluruh layanan:
+4. Periksa status kesiapan seluruh layanan:
    ```bash
    docker compose ps
    ```
 
-4. Buka aplikasi di peramban web:
+5. Buka aplikasi di peramban web:
    - **Aplikasi Web**: [http://localhost:8080](http://localhost:8080)
    - **API Gateway (Bun)**: [http://localhost:3000](http://localhost:3000) (juga dapat diakses via reverse proxy di `http://localhost:8080/api`)
+
+`APP_ORIGIN` harus sama persis dengan origin web. Konfigurasi default memakai HTTP lokal sehingga `COOKIE_SECURE=false`; gunakan HTTPS dan `COOKIE_SECURE=true` bila lingkungan mendukungnya. Cookie sesi `HttpOnly` berlaku satu jam dan dicabut saat logout; request yang mengubah data harus mengirim cookie CSRF dan header `X-CSRF-Token` yang sesuai. Frontend menanganinya otomatis.
+
+Gateway membuat tabel sesi, audit, dan idempotensi jika belum ada; pengguna database memerlukan izin `CREATE`. Volume database lama tidak dihapus atau diperbarui otomatis. Undangan lama tidak lagi berlaku. Periksa dan rekonsiliasi status tagihan, pembayaran, serta nominal klaim lama sebelum digunakan; data seed baru hanya diterapkan pada volume baru. Akun pasien belum memiliki hubungan terverifikasi dengan rekam pasien, sehingga data klinik tidak ditampilkan kepada role pasien.
 
 ---
 
@@ -84,18 +90,30 @@ Seluruh akun latihan menggunakan kata sandi seragam: `password123`.
    - Daftarkan kunjungan baru dengan memilih pasien terdaftar dan dokter pemeriksa.
 3. **Tarif Tindakan Medis**:
    - Buka menu **Tarif Layanan** untuk meninjau 10 jenis layanan poliklinik.
-   - Staf dapat melihat dan memodifikasi biaya tindakan melalui tombol ubah tarif.
+   - Admin atau manajer dapat melihat dan mengubah tarif untuk kliniknya.
 4. **Tagihan & Kasir**:
    - Buka menu **Tagihan & Kasir** untuk melihat daftar faktur pasien.
-   - Klik tombol **Proses Bayar** untuk memilih metode (QRIS, Tunai, Transfer Bank) dan mencatat pelunasan.
+   - Klik **Proses Bayar** untuk mencatat sisa tagihan menggunakan QRIS, Tunai, atau Transfer Bank. Request yang sama memakai kunci idempotensi.
 5. **Klaim Asuransi**:
    - Buka menu **Klaim Asuransi** untuk meninjau berkas reimbursement.
-   - Gunakan tombol **Setujui** untuk memproses approval klaim, serta tombol pemeriksaan lampiran dokumen.
+   - Admin atau manajer dapat menyetujui klaim berstatus diajukan jika nominalnya sama dengan sisa tagihan. Lampiran yang ditampilkan berupa metadata, bukan isi berkas.
 6. **Laporan & Ekspor**:
    - Buka menu **Laporan** untuk melihat rekapitulasi transaksi harian.
-   - Gunakan fitur **Ekspor Dokumen (CLI)** untuk simulasi ekstraksi data.
+   - Gunakan fitur **Ekspor Dokumen** untuk simulasi ekspor tanpa menjalankan shell.
 7. **Staf & Undangan**:
-   - Buka menu **Staf & Undangan** untuk melihat kepegawaian aktif atau mengaktifkan token undangan pegawai baru.
+   - Admin atau manajer membuat undangan role staf/kasir; token ditampilkan sekali dan berlaku 24 jam. Calon staf menggunakan tautan **Aktivasi undangan staf** pada halaman login.
+
+## Pengujian Keamanan
+
+`tests/security.integration.mjs` mengubah data, termasuk pembayaran dan klaim. Jalankan hanya pada database uji sekali pakai yang baru dimuat dari `database/01_schema.sql` dan `database/02_seed.sql`, dengan gateway dan PHP terhubung ke database uji tersebut. Tes memerlukan Node.js 20+ dan dependensi `bun-api` terpasang.
+
+Atur `KLINIKFLOW_TEST_DISPOSABLE=1`, `KLINIKFLOW_TEST_BASE`, `KLINIKFLOW_TEST_PHP_BASE`, `KLINIKFLOW_TEST_DB_HOST`, `KLINIKFLOW_TEST_DB_PORT`, `KLINIKFLOW_TEST_DB_NAME`, `KLINIKFLOW_TEST_DB_USER`, dan `KLINIKFLOW_TEST_DB_PASSWORD` sesuai lingkungan uji, lalu jalankan:
+
+```bash
+node --test tests/security.integration.mjs
+```
+
+Tes mencakup sesi dan logout, CSRF, batas peran dan klinik, komunikasi PHP, pembayaran berulang, approval klaim, dan aktivasi undangan. Tes ini bukan audit keamanan menyeluruh.
 
 ---
 

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
-import { getToken } from './api';
+import { getCurrentUser } from './api';
 
 import Login from './views/Login.vue';
 import Dashboard from './views/Dashboard.vue';
@@ -10,9 +10,11 @@ import Invoices from './views/Invoices.vue';
 import Claims from './views/Claims.vue';
 import Reports from './views/Reports.vue';
 import Staff from './views/Staff.vue';
+import ActivateInvitation from './views/ActivateInvitation.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: Login, meta: { guest: true } },
+  { path: '/activate', component: ActivateInvitation, meta: { guest: true } },
   { path: '/', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/patients', component: Patients, meta: { requiresAuth: true } },
   { path: '/visits', component: Visits, meta: { requiresAuth: true } },
@@ -29,11 +31,11 @@ const router = createRouter({
 });
 
 router.beforeEach((to, _from, next) => {
-  const token = getToken();
-  if (to.meta.requiresAuth && !token) {
+  const user = getCurrentUser();
+  if (to.meta.requiresAuth && !user) {
     return next('/login');
   }
-  if (to.meta.guest && token) {
+  if (to.meta.guest && user) {
     return next('/');
   }
   next();

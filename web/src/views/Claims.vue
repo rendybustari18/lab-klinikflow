@@ -37,7 +37,7 @@
                 <td>Rp {{ Number(c.amount).toLocaleString('id-ID') }}</td>
                 <td><span class="badge" :class="claimBadge(c.status)">{{ c.status }}</span></td>
                 <td>
-                  <button class="btn btn-outline btn-sm" @click="approveClaim(c)">Setujui</button>
+                  <button v-if="canApprove" class="btn btn-outline btn-sm" :disabled="c.status !== 'submitted'" @click="approveClaim(c)">Setujui</button>
                 </td>
               </tr>
             </tbody>
@@ -73,10 +73,6 @@
             <span>Klinik Pemilik</span>
             <span class="badge badge-secondary">{{ attachmentData.clinic_name }}</span>
           </div>
-          <div class="result-row">
-            <span>Path Dokumen</span>
-            <code class="inline-code">{{ attachmentData.file_path }}</code>
-          </div>
         </div>
       </div>
     </div>
@@ -85,11 +81,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { apiFetch } from '../api';
+import { apiFetch, getCurrentUser } from '../api';
 
 const claims = ref<any[]>([]);
 const targetAttachmentUuid = ref('att-e5d6-7c8b-0004');
 const attachmentData = ref<any>(null);
+const canApprove = ['admin', 'manager'].includes(getCurrentUser()?.role);
 
 async function fetchClaims() {
   try {
@@ -103,7 +100,7 @@ async function fetchClaims() {
 }
 
 async function approveClaim(c: any) {
-  if (!confirm(`Setujui pencairan klaim ${c.claim_number} sebesar Rp ${Number(c.amount).toLocaleString('id-ID')}?`)) return;
+  if (!confirm(`Setujui klaim ${c.claim_number} sebesar Rp ${Number(c.amount).toLocaleString('id-ID')}?`)) return;
   try {
     const res = await apiFetch('/claims/approve', {
       method: 'POST',
