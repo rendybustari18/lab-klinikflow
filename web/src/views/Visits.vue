@@ -39,6 +39,7 @@
         </table>
       </div>
       <div v-else class="state">Belum ada data kunjungan.</div>
+      <Pager :pagination="pagination" @change="goToPage" />
     </div>
 
     <div v-if="showAddModal" class="modal-overlay">
@@ -89,11 +90,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { apiFetch } from '../api';
+import Pager from '../components/Pager.vue';
+import type { PaginationMeta } from '../pagination';
 
 const visits = ref<any[]>([]);
 const patientList = ref<any[]>([]);
 const loading = ref(true);
 const showAddModal = ref(false);
+const page = ref(1);
+const pagination = ref<PaginationMeta | null>(null);
 
 const form = ref({
   patient_id: 1,
@@ -102,12 +107,14 @@ const form = ref({
   notes: '',
 });
 
-async function fetchVisits() {
+async function fetchVisits(targetPage = page.value) {
   loading.value = true;
   try {
-    const res = await apiFetch('/visits');
+    const res = await apiFetch(`/visits?page=${targetPage}`);
     if (res.success && res.data) {
       visits.value = res.data;
+      pagination.value = res.pagination ?? null;
+      page.value = targetPage;
     }
   } catch (err) {
     console.error(err);
@@ -118,7 +125,8 @@ async function fetchVisits() {
 
 async function loadPatients() {
   try {
-    const res = await apiFetch('/patients');
+    // Pemilih pasien memakai batas maksimum server (100 data per halaman).
+    const res = await apiFetch('/patients?limit=100');
     if (res.success && res.data) {
       patientList.value = res.data;
     }
@@ -137,7 +145,7 @@ async function submitVisit() {
     if (res.success) {
       alert(`Kunjungan berhasil dicatat dengan UUID: ${res.visit_uuid}`);
       showAddModal.value = false;
-      await fetchVisits();
+      await fetchVisits(1);
     } else {
       alert(`Gagal: ${res.error}`);
     }
@@ -154,6 +162,10 @@ function statusBadge(status: string) {
     case 'cancelled': return 'badge-danger';
     default: return 'badge-secondary';
   }
+}
+
+function goToPage(target: number) {
+  fetchVisits(target);
 }
 
 onMounted(() => {

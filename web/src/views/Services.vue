@@ -58,7 +58,7 @@
 
             <div class="field">
               <label class="label" for="service_fee">Nominal Tarif Baru (Rp)</label>
-              <input id="service_fee" v-model.number="adjustForm.fee" class="input" type="number" step="1000" min="0" required />
+              <input id="service_fee" v-model.number="adjustForm.fee" class="input" type="number" step="1000" min="1000" required />
             </div>
           </div>
 

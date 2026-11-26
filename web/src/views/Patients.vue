@@ -15,7 +15,7 @@
           class="input search-input"
           type="text"
           placeholder="Cari berdasarkan MRN, nama pasien, atau nomor telepon..."
-          @input="fetchPatients"
+          @input="fetchPatients(1)"
         />
       </div>
 
@@ -47,6 +47,7 @@
         </table>
       </div>
       <div v-else class="state">Tidak ada data pasien yang ditemukan.</div>
+      <Pager :pagination="pagination" @change="goToPage" />
     </div>
 
     <div v-if="showAddModal" class="modal-overlay">
@@ -60,7 +61,7 @@
           <div class="modal-body">
             <div class="field">
               <label class="label" for="full_name">Nama Lengkap Pasien</label>
-              <input id="full_name" v-model="form.full_name" class="input" type="text" required placeholder="Nama lengkap pasien" />
+              <input id="full_name" v-model="form.full_name" class="input" type="text" required maxlength="150" pattern="[^<>]+" title="Tanpa karakter < atau >" placeholder="Nama lengkap pasien" />
             </div>
 
             <div class="form-grid">
@@ -103,6 +104,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { apiFetch, getCurrentUser } from '../api';
+import Pager from '../components/Pager.vue';
+import type { PaginationMeta } from '../pagination';
 
 const patients = ref<any[]>([]);
 const canRegister = ['admin', 'manager', 'staff'].includes(getCurrentUser()?.role);
@@ -110,6 +113,8 @@ const searchQuery = ref('');
 const loading = ref(true);
 const showAddModal = ref(false);
 const submitting = ref(false);
+const page = ref(1);
+const pagination = ref<PaginationMeta | null>(null);
 
 const form = ref({
   full_name: '',
@@ -119,13 +124,16 @@ const form = ref({
   address: '',
 });
 
-async function fetchPatients() {
+async function fetchPatients(targetPage = page.value) {
   loading.value = true;
   try {
-    const q = searchQuery.value ? `?search=${encodeURIComponent(searchQuery.value)}` : '';
-    const res = await apiFetch(`/patients${q}`);
+    const params = new URLSearchParams({ page: String(targetPage) });
+    if (searchQuery.value) params.set('search', searchQuery.value);
+    const res = await apiFetch(`/patients?${params}`);
     if (res.success && res.data) {
       patients.value = res.data;
+      pagination.value = res.pagination ?? null;
+      page.value = targetPage;
     }
   } catch (err) {
     console.error(err);
@@ -155,6 +163,10 @@ async function submitPatient() {
   } finally {
     submitting.value = false;
   }
+}
+
+function goToPage(target: number) {
+  fetchPatients(target);
 }
 
 onMounted(() => {

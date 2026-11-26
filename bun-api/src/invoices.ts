@@ -1,28 +1,33 @@
 import pool from './db';
 import { extractAuthUser, type UserPayload } from './auth';
 import { randomUUID } from 'node:crypto';
+import { paginationMeta, parsePagination } from './pagination';
 
 // Handler Tagihan Medis & Simulasi Pembayaran
 export async function handleListInvoices(req: Request): Promise<Response> {
   const user = await extractAuthUser(req);
   if (!user) return Response.json({ success: false, error: 'Akses ditolak' }, { status: 401 });
+  const pagination = parsePagination(new URL(req.url));
+  if (pagination instanceof Response) return pagination;
+  const [countRows] = await pool.query<any[]>('SELECT COUNT(*) AS total FROM invoices WHERE clinic_id = ?', [user.clinic_id]);
   const [rows] = await pool.query<any[]>(
-        `SELECT i.*, p.full_name as patient_name, p.mrn, c.name as clinic_name, v.doctor_name, v.visit_date,
+    `SELECT i.id, i.invoice_number, i.amount, i.status, i.issued_at,
+            p.full_name as patient_name, c.name as clinic_name, v.doctor_name,
           i.amount - COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.invoice_id = i.id AND pay.settlement_status = 'settled'), 0) AS outstanding_amount
      FROM invoices i
      JOIN patients p ON i.patient_id = p.id
      JOIN clinics c ON i.clinic_id = c.id
      JOIN visits v ON i.visit_id = v.id
-    WHERE i.clinic_id = ? ORDER BY i.id DESC`, [user.clinic_id]
+    WHERE i.clinic_id = ? ORDER BY i.id DESC LIMIT ? OFFSET ?`, [user.clinic_id, pagination.limit, pagination.offset]
   );
 
-  return Response.json({ success: true, data: rows });
+  return Response.json({ success: true, data: rows, pagination: paginationMeta(pagination, Number(countRows[0].total)) });
 }
 
 export async function handleGetInvoiceDetail(invoiceId: number, user: UserPayload): Promise<Response> {
   const [invRows] = await pool.query<any[]>(
-    `SELECT i.*, p.full_name as patient_name, p.mrn, p.phone, p.address, c.name as clinic_name, c.code as clinic_code,
-            v.doctor_name, v.visit_date
+    `SELECT i.id, i.invoice_number, i.amount, i.status, i.issued_at, i.paid_at,
+            p.full_name as patient_name, p.mrn, c.name as clinic_name, v.doctor_name, v.visit_date
      FROM invoices i
      JOIN patients p ON i.patient_id = p.id
      JOIN clinics c ON i.clinic_id = c.id
@@ -38,7 +43,7 @@ export async function handleGetInvoiceDetail(invoiceId: number, user: UserPayloa
   const invoice = invRows[0];
 
   const [items] = await pool.query<any[]>(
-    `SELECT ii.*, s.name as service_name, s.code as service_code, s.category
+    `SELECT ii.id, ii.quantity, ii.unit_price, ii.total_price, s.name as service_name, s.code as service_code, s.category
      FROM invoice_items ii
      JOIN services s ON ii.service_id = s.id
      WHERE ii.invoice_id = ?`,
@@ -47,7 +52,7 @@ export async function handleGetInvoiceDetail(invoiceId: number, user: UserPayloa
   invoice.items = items;
 
   const [payments] = await pool.query<any[]>(
-    `SELECT * FROM payments WHERE invoice_id = ? ORDER BY id DESC`,
+    `SELECT id, payment_ref, amount, method, settlement_status, paid_at FROM payments WHERE invoice_id = ? ORDER BY id DESC`,
     [invoiceId]
   );
   invoice.payments = payments;
@@ -70,7 +75,7 @@ export async function handleProcessPayment(req: Request): Promise<Response> {
     }
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const [invRows] = await connection.query<any[]>('SELECT * FROM invoices WHERE id = ? AND clinic_id = ? FOR UPDATE', [invoice_id, user.clinic_id]);
+    const [invRows] = await connection.query<any[]>('SELECT id, invoice_number, amount, status FROM invoices WHERE id = ? AND clinic_id = ? FOR UPDATE', [invoice_id, user.clinic_id]);
     if (!invRows.length) {
       await connection.rollback();
       return Response.json({ success: false, error: 'Tagihan tidak ditemukan' }, { status: 404 });

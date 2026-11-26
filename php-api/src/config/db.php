@@ -3,10 +3,14 @@
 $dbHost = getenv('DB_HOST') ?: 'mysql';
 $dbPort = getenv('DB_PORT') ?: '3306';
 $dbName = getenv('DB_NAME') ?: 'klinikflow_db';
-$dbUser = getenv('DB_USER') ?: 'klinikflow_user';
-$dbPass = getenv('DB_PASS') ?: 'klinikflow_pass';
+// T23: kredensial wajib dari environment; tidak ada fallback yang tertulis di sumber.
+$dbUser = getenv('DB_USER') ?: '';
+$dbPass = getenv('DB_PASS') ?: '';
 
 try {
+    if ($dbUser === '' || $dbPass === '') {
+        throw new PDOException('DB_USER dan DB_PASS wajib diisi');
+    }
     $dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
     $pdo = new PDO($dsn, $dbUser, $dbPass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

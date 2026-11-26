@@ -6,6 +6,7 @@ import { handleCreateVisit, handleGetVisitByUuid, handleListVisits } from './vis
 import { handleGetInvoiceDetail, handleListInvoices, handleProcessPayment } from './invoices';
 import { proxyToPhp } from './proxy';
 import pool from './db';
+import type { ClientInfo } from './audit';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
@@ -24,28 +25,19 @@ function allowedRoles(path: string, method: string): UserPayload['role'][] | nul
   return null;
 }
 
-await pool.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
-  id CHAR(36) PRIMARY KEY, user_id INT NOT NULL, expires_at DATETIME NOT NULL,
-  INDEX idx_sessions_expiry (expires_at),
-  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB`);
-await pool.query(`CREATE TABLE IF NOT EXISTS audit_log (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY, actor_id INT NOT NULL, clinic_id INT NOT NULL,
-  action VARCHAR(64) NOT NULL, entity_type VARCHAR(32) NOT NULL, entity_id INT NOT NULL,
-  details JSON NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_audit_clinic (clinic_id, created_at)
-) ENGINE=InnoDB`);
-await pool.query(`CREATE TABLE IF NOT EXISTS payment_requests (
-  request_id CHAR(36) PRIMARY KEY, invoice_id INT NOT NULL, user_id INT NOT NULL, payment_id INT NOT NULL,
-  CONSTRAINT fk_payment_requests_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id),
-  CONSTRAINT fk_payment_requests_user FOREIGN KEY (user_id) REFERENCES users(id),
-  CONSTRAINT fk_payment_requests_payment FOREIGN KEY (payment_id) REFERENCES payments(id)
-) ENGINE=InnoDB`);
+// T23: tabel auth_sessions, audit_log, dan payment_requests dibuat oleh
+// database/01_schema.sql; akun DB aplikasi tidak memiliki hak CREATE.
 
 const server = Bun.serve({
   port: PORT,
-  async fetch(req: Request) {
+  // T22: batasi ukuran body (gateway juga terekspos langsung di :3000, tidak hanya lewat nginx).
+  maxRequestBodySize: 1024 * 1024,
+  async fetch(req: Request, server) {
     const url = new URL(req.url);
+    const client: ClientInfo = {
+      ip: server.requestIP(req)?.address ?? null,
+      forwardedIp: req.headers.get('X-Real-IP')?.slice(0, 64) || null,
+    };
     const path = url.pathname;
     const method = req.method;
 
@@ -75,11 +67,11 @@ const server = Bun.serve({
 
       // 1. Auth routes
       if (path === '/api/auth/login' && method === 'POST') {
-        response = await handleLogin(req);
+        response = await handleLogin(req, client);
       } else if (path === '/api/auth/me' && method === 'GET') {
         response = await handleGetMe(req);
       } else if (path === '/api/auth/logout' && method === 'POST') {
-        response = await handleLogout(user!);
+        response = await handleLogout(user!, client);
       }
 
       // 2. Services catalog & fee adjustment

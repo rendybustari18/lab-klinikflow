@@ -3,6 +3,7 @@
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/helpers/response.php';
 require_once __DIR__ . '/helpers/auth.php';
+require_once __DIR__ . '/helpers/pagination.php';
 
 $action = $_GET['action'] ?? 'list';
 $user = requireInternalUser($action === 'approve' ? ['admin', 'manager'] : ['admin', 'manager', 'staff', 'cashier']);
@@ -25,7 +26,13 @@ switch ($action) {
 }
 
 function handleListClaims($pdo, $clinicId) {
-    $query = "SELECT c.*, cl.name as clinic_name, i.invoice_number, p.full_name as patient_name
+    $pagination = getPagination();
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM claims WHERE clinic_id = ?");
+    $countStmt->execute([$clinicId]);
+    $total = (int)$countStmt->fetchColumn();
+
+    $query = "SELECT c.id, c.claim_uuid, c.claim_number, c.insurance_name, c.amount, c.status,
+                     cl.name as clinic_name, p.full_name as patient_name
               FROM claims c
               JOIN clinics cl ON c.clinic_id = cl.id
               JOIN invoices i ON c.invoice_id = i.id
@@ -35,13 +42,12 @@ function handleListClaims($pdo, $clinicId) {
     $params = [$clinicId];
 
     $query .= " ORDER BY c.id DESC";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute($params);
-    $claims = $stmt->fetchAll();
+    $claims = fetchPage($pdo, $query, $params, $pagination);
 
     sendJson([
         'success' => true,
-        'data' => $claims
+        'data' => $claims,
+        'pagination' => paginationMeta($pagination, $total)
     ]);
 }
 
@@ -51,7 +57,8 @@ function handleClaimDetail($pdo, $clinicId) {
         sendError('Parameter id klaim diperlukan', 400);
     }
 
-    $stmt = $pdo->prepare("SELECT c.*, cl.name as clinic_name, i.invoice_number, p.full_name as patient_name
+    $stmt = $pdo->prepare("SELECT c.id, c.claim_uuid, c.claim_number, c.insurance_name, c.amount, c.status, c.submitted_at, c.approved_at,
+                                  cl.name as clinic_name, i.invoice_number, p.full_name as patient_name
                            FROM claims c
                            JOIN clinics cl ON c.clinic_id = cl.id
                            JOIN invoices i ON c.invoice_id = i.id
@@ -92,10 +99,10 @@ function handleApproveClaim($pdo, $user) {
             $pdo->rollBack();
             sendError('Klaim tidak ditemukan', 404);
         }
-        $invoiceStmt = $pdo->prepare("SELECT * FROM invoices WHERE id = ? AND clinic_id = ? FOR UPDATE");
+        $invoiceStmt = $pdo->prepare("SELECT id, amount, status FROM invoices WHERE id = ? AND clinic_id = ? FOR UPDATE");
         $invoiceStmt->execute([$claimRef['invoice_id'], $user['clinic_id']]);
         $invoice = $invoiceStmt->fetch();
-        $stmt = $pdo->prepare("SELECT * FROM claims WHERE id = ? AND clinic_id = ? FOR UPDATE");
+        $stmt = $pdo->prepare("SELECT id, invoice_id, claim_number, amount, status FROM claims WHERE id = ? AND clinic_id = ? FOR UPDATE");
         $stmt->execute([$claimId, $user['clinic_id']]);
         $claim = $stmt->fetch();
         if (!$invoice || !$claim || (int)$claim['invoice_id'] !== (int)$invoice['id'] ||

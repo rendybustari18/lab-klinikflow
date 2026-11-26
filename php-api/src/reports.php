@@ -3,32 +3,36 @@
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/helpers/response.php';
 require_once __DIR__ . '/helpers/auth.php';
+require_once __DIR__ . '/helpers/pagination.php';
 
 $user = requireInternalUser(['admin', 'manager']);
 $filterQuery = $_GET['filter'] ?? $_GET['search'] ?? '';
+$pagination = getPagination();
 
 // Ambil ringkasan laporan tagihan dan kunjungan
-$query = "SELECT i.*, p.full_name as patient_name, p.mrn, c.name as clinic_name, v.doctor_name, v.visit_date
-          FROM invoices i
+$from = " FROM invoices i
           JOIN patients p ON i.patient_id = p.id
           JOIN clinics c ON i.clinic_id = c.id
           JOIN visits v ON i.visit_id = v.id
           WHERE 1=1";
 $params = [];
 
-$query .= " AND i.clinic_id = ?";
+$from .= " AND i.clinic_id = ?";
 $params[] = $user['clinic_id'];
 
 if (!empty($filterQuery)) {
-    $query .= " AND (p.full_name LIKE ? OR i.invoice_number LIKE ?)";
+    $from .= " AND (p.full_name LIKE ? OR i.invoice_number LIKE ?)";
     $params[] = "%$filterQuery%";
     $params[] = "%$filterQuery%";
 }
 
-$query .= " ORDER BY i.id DESC";
-$stmt = $pdo->prepare($query);
-$stmt->execute($params);
-$records = $stmt->fetchAll();
+$countStmt = $pdo->prepare("SELECT COUNT(*)" . $from);
+$countStmt->execute($params);
+$total = (int)$countStmt->fetchColumn();
+
+$query = "SELECT i.id, i.invoice_number, i.amount, i.status, p.full_name as patient_name, p.mrn,
+                 c.name as clinic_name, v.doctor_name, v.visit_date" . $from . " ORDER BY i.id DESC";
+$records = fetchPage($pdo, $query, $params, $pagination);
 
 $summaryMessage = !empty($filterQuery) 
     ? "Menampilkan arsip laporan transaksi untuk kata kunci: " . $filterQuery 
@@ -37,8 +41,10 @@ $summaryMessage = !empty($filterQuery)
 sendJson([
     'success' => true,
     'filter' => $filterQuery,
-    'summary_html' => $summaryMessage,
-    'total_records' => count($records),
-    'data' => $records
+    // Ringkasan dikirim sebagai teks biasa; klien wajib merendernya sebagai teks.
+    'summary' => $summaryMessage,
+    'total_records' => $total,
+    'data' => $records,
+    'pagination' => paginationMeta($pagination, $total)
 ]);
 

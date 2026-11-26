@@ -40,6 +40,7 @@
         </table>
       </div>
       <div v-else class="state">Belum ada data tagihan.</div>
+      <Pager :pagination="pagination" @change="goToPage" />
     </div>
 
     <div v-if="showPaymentModal" class="modal-overlay">
@@ -98,6 +99,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { apiFetch } from '../api';
+import Pager from '../components/Pager.vue';
+import type { PaginationMeta } from '../pagination';
 
 const invoices = ref<any[]>([]);
 const loading = ref(true);
@@ -107,13 +110,17 @@ const payAmount = ref(0);
 const payMethod = ref('qris');
 const submittingPay = ref(false);
 const paymentRequestId = ref('');
+const page = ref(1);
+const pagination = ref<PaginationMeta | null>(null);
 
-async function fetchInvoices() {
+async function fetchInvoices(targetPage = page.value) {
   loading.value = true;
   try {
-    const res = await apiFetch('/invoices');
+    const res = await apiFetch(`/invoices?page=${targetPage}`);
     if (res.success && res.data) {
       invoices.value = res.data;
+      pagination.value = res.pagination ?? null;
+      page.value = targetPage;
     }
   } catch (err) {
     console.error(err);
@@ -164,6 +171,10 @@ function statusBadge(status: string) {
     case 'cancelled': return 'badge-danger';
     default: return 'badge-secondary';
   }
+}
+
+function goToPage(target: number) {
+  fetchInvoices(target);
 }
 
 onMounted(() => {

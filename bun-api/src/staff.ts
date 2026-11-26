@@ -74,7 +74,7 @@ export async function handleAcceptInvitation(req: Request): Promise<Response> {
     connection = await pool.getConnection();
     await connection.beginTransaction();
     const [invRows] = await connection.query<any[]>(
-      `SELECT * FROM staff_invitations WHERE token = ? AND is_accepted = 0
+      `SELECT id, clinic_id, email, role FROM staff_invitations WHERE token = ? AND is_accepted = 0
        AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) FOR UPDATE`,
       [createHash('sha256').update(token).digest('hex')]
     );

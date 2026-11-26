@@ -6,6 +6,9 @@ COPY package.json bun.lockb* bun.lock* ./
 RUN bun install --frozen-lockfile || bun install
 
 COPY . .
+# T02: akun demo & sandi bawaan hanya dibundel bila VITE_LAB_MODE=true.
+ARG VITE_LAB_MODE=false
+ENV VITE_LAB_MODE=$VITE_LAB_MODE
 RUN bun run build
 
 FROM nginx:alpine

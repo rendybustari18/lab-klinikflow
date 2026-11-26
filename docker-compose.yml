@@ -4,18 +4,23 @@ services:
     container_name: klinikflow-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_klinikflow
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: klinikflow_db
-      MYSQL_USER: klinikflow_user
-      MYSQL_PASSWORD: klinikflow_pass
+      # Dipakai 03_app_users.sh untuk membuat akun aplikasi berhak minimum.
+      BUN_DB_USER: ${BUN_DB_USER:?Set BUN_DB_USER in .env}
+      BUN_DB_PASSWORD: ${BUN_DB_PASSWORD:?Set BUN_DB_PASSWORD in .env}
+      PHP_DB_USER: ${PHP_DB_USER:?Set PHP_DB_USER in .env}
+      PHP_DB_PASSWORD: ${PHP_DB_PASSWORD:?Set PHP_DB_PASSWORD in .env}
     volumes:
       - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ./database/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+      - ./database/03_app_users.sh:/docker-entrypoint-initdb.d/03_app_users.sh:ro
       - klinikflow_mysql_data:/var/lib/mysql
     networks:
       - klinikflow-internal
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_klinikflow"]
+      # $$ agar nilai diekspansi di dalam container, bukan ditulis ke konfigurasi compose.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -31,8 +36,8 @@ services:
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_NAME: klinikflow_db
-      DB_USER: klinikflow_user
-      DB_PASS: klinikflow_pass
+      DB_USER: ${PHP_DB_USER:?Set PHP_DB_USER in .env}
+      DB_PASS: ${PHP_DB_PASSWORD:?Set PHP_DB_PASSWORD in .env}
       INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET:?Set INTERNAL_AUTH_SECRET in .env}
     networks:
       - klinikflow-internal
@@ -53,8 +58,8 @@ services:
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_NAME: klinikflow_db
-      DB_USER: klinikflow_user
-      DB_PASS: klinikflow_pass
+      DB_USER: ${BUN_DB_USER:?Set BUN_DB_USER in .env}
+      DB_PASS: ${BUN_DB_PASSWORD:?Set BUN_DB_PASSWORD in .env}
       PHP_API_URL: http://php-api
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET:?Set INTERNAL_AUTH_SECRET in .env}
@@ -72,6 +77,8 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        VITE_LAB_MODE: ${VITE_LAB_MODE:-false}
     container_name: klinikflow-web
     restart: unless-stopped
     ports:

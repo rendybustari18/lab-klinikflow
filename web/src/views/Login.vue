@@ -25,29 +25,24 @@
         </button>
       </form>
 
-      <div class="auth-divider"><span>Pilih Akun Demo</span></div>
+      <template v-if="labMode">
+        <div class="auth-divider"><span>Pilih Akun Demo</span></div>
 
-      <div class="account-list">
-        <button class="btn btn-outline btn-sm btn-block" @click="fillAccount('admin@klinikflow.local')">
-          Admin dr. Farhan — Klinik Mentari
-        </button>
-        <button class="btn btn-outline btn-sm btn-block" @click="fillAccount('manager@klinikflow.local')">
-          Koordinator Siti Rahayu — Klinik Mentari
-        </button>
-        <button class="btn btn-outline btn-sm btn-block" @click="fillAccount('staf1@klinikflow.local')">
-          Staf Pendaftaran Doni — Klinik Mentari
-        </button>
-        <button class="btn btn-outline btn-sm btn-block" @click="fillAccount('kasir1@klinikflow.local')">
-          Kasir Maya — Klinik Mentari
-        </button>
-        <button class="btn btn-outline btn-sm btn-block" @click="fillAccount('staf2@klinikflow.local')">
-          Staf Lia — Klinik Sehat Sentosa
-        </button>
-      </div>
+        <div class="account-list">
+          <button
+            v-for="account in labAccounts"
+            :key="account.email"
+            class="btn btn-outline btn-sm btn-block"
+            @click="fillAccount(account.email)"
+          >
+            {{ account.label }}
+          </button>
+        </div>
 
-      <p class="field-hint" style="text-align: center; margin-top: 14px;">
-        Password seragam semua akun lab: <code class="inline-code">password123</code>
-      </p>
+        <p class="field-hint" style="text-align: center; margin-top: 14px;">
+          Password seragam semua akun lab: <code class="inline-code">{{ labPassword }}</code>
+        </p>
+      </template>
       <p class="field-hint" style="text-align: center"><router-link to="/activate">Aktivasi undangan staf</router-link></p>
     </div>
   </div>
@@ -59,14 +54,30 @@ import { useRouter } from 'vue-router';
 import { apiFetch, setCurrentUser } from '../api';
 
 const router = useRouter();
-const email = ref('staf1@klinikflow.local');
-const password = ref('password123');
+
+// T02: akun demo dan sandi bawaan hanya untuk build lab (VITE_LAB_MODE=true).
+// Perbandingan ditulis langsung pada setiap ekspresi agar Vite/esbuild dapat
+// menghapus data demo dari bundle ketika mode lab tidak aktif.
+const labMode = import.meta.env.VITE_LAB_MODE === 'true';
+const labPassword = import.meta.env.VITE_LAB_MODE === 'true' ? 'password123' : '';
+const labAccounts = import.meta.env.VITE_LAB_MODE === 'true'
+  ? [
+      { email: 'admin@klinikflow.local', label: 'Admin dr. Farhan — Klinik Mentari' },
+      { email: 'manager@klinikflow.local', label: 'Koordinator Siti Rahayu — Klinik Mentari' },
+      { email: 'staf1@klinikflow.local', label: 'Staf Pendaftaran Doni — Klinik Mentari' },
+      { email: 'kasir1@klinikflow.local', label: 'Kasir Maya — Klinik Mentari' },
+      { email: 'staf2@klinikflow.local', label: 'Staf Lia — Klinik Sehat Sentosa' },
+    ]
+  : [];
+
+const email = ref(import.meta.env.VITE_LAB_MODE === 'true' ? 'staf1@klinikflow.local' : '');
+const password = ref(labPassword);
 const errorMsg = ref('');
 const loading = ref(false);
 
 function fillAccount(accEmail: string) {
   email.value = accEmail;
-  password.value = 'password123';
+  password.value = labPassword;
 }
 
 async function submitLogin() {

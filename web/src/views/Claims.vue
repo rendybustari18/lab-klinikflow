@@ -44,6 +44,7 @@
           </table>
         </div>
         <div v-else class="state">Belum ada pengajuan klaim.</div>
+        <Pager :pagination="pagination" @change="goToPage" />
       </div>
 
       <div class="card">
@@ -82,17 +83,23 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { apiFetch, getCurrentUser } from '../api';
+import Pager from '../components/Pager.vue';
+import type { PaginationMeta } from '../pagination';
 
 const claims = ref<any[]>([]);
 const targetAttachmentUuid = ref('att-e5d6-7c8b-0004');
 const attachmentData = ref<any>(null);
 const canApprove = ['admin', 'manager'].includes(getCurrentUser()?.role);
+const page = ref(1);
+const pagination = ref<PaginationMeta | null>(null);
 
-async function fetchClaims() {
+async function fetchClaims(targetPage = page.value) {
   try {
-    const res = await apiFetch('/claims');
+    const res = await apiFetch(`/claims?page=${targetPage}`);
     if (res.success && res.data) {
       claims.value = res.data;
+      pagination.value = res.pagination ?? null;
+      page.value = targetPage;
     }
   } catch (err) {
     console.error(err);
@@ -140,6 +147,10 @@ function claimBadge(status: string) {
     case 'rejected': return 'badge-danger';
     default: return 'badge-secondary';
   }
+}
+
+function goToPage(target: number) {
+  fetchClaims(target);
 }
 
 onMounted(() => {
